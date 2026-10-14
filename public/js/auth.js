@@ -72,11 +72,10 @@
       var button = form.querySelector(".auth-submit");
       button.disabled = true;
       button.classList.add("is-loading");
-      // TODO: replace with the real API call.
+      // TODO: replace with the real API call once the backend exists.
       window.setTimeout(function () {
-        button.disabled = false;
-        button.classList.remove("is-loading");
-      }, 1200);
+        window.location.href = "lesson.html";
+      }, 600);
     });
   });
 
