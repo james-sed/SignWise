@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -12,7 +13,9 @@ class WebsiteMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $subject, $body;
+    public $subject;
+
+    public $body;
 
     /**
      * Create a new message instance.
@@ -21,11 +24,6 @@ class WebsiteMail extends Mailable
     {
         $this->subject = $subject;
         $this->body = $body;
-    }
-
-    public function build()
-    {
-        return $this->view('email.signup_email');
     }
 
     /**
@@ -47,7 +45,7 @@ class WebsiteMail extends Mailable
             view: 'email.email',
             with: [
                 'subject' => $this->subject,
-                'body' => $this->body
+                'body' => $this->body,
             ]
         );
     }
@@ -55,7 +53,7 @@ class WebsiteMail extends Mailable
     /**
      * Get the attachments for the message.
      *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
+     * @return array<int, Attachment>
      */
     public function attachments(): array
     {

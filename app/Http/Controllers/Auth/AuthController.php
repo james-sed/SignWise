@@ -3,19 +3,18 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WebsiteMail;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
-use App\Mail\WebsiteMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
-
     public function register_create()
     {
         return view('Auth.register');
@@ -29,10 +28,10 @@ class AuthController extends Controller
             'password' => [
                 'required',
                 'confirmed',
-                Password::min(8)->max(16)->mixedCase()->numbers()->symbols()
+                Password::min(8)->max(16)->mixedCase()->numbers()->symbols(),
             ],
         ]);
-        $user = new User();
+        $user = new User;
         $email_token = Str::random(64);
         $user->name = $request->name;
         $user->email = $request->email;
@@ -48,7 +47,7 @@ class AuthController extends Controller
         );
 
         $subject = 'Registration Verification';
-        $message = 'Click on the following link to verify your email: <br> <a href="' . $link . '">' . $link . '</a>';
+        $message = 'Click on the following link to verify your email: <br> <a href="'.$link.'">'.$link.'</a>';
 
         Mail::to($request->email)->send(new WebsiteMail($subject, $message));
 
@@ -64,25 +63,24 @@ class AuthController extends Controller
         if (! $request->hasValidSignature()) {
             return response()->json([
                 'status' => false,
-                'message' => "Invalid or expired verification link."
+                'message' => 'Invalid or expired verification link.',
             ]);
         }
 
         $user = User::CheckEmailExist($email)->CheckTokenExist($email_token)->first();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json([
-                'message' => 'Invalid token or email'
+                'message' => 'Invalid token or email',
             ]);
         }
         $user->forceFill([
-            "email_token" => null,
-            "email_verified_at" => now()
+            'email_token' => null,
+            'email_verified_at' => now(),
         ])->save();
 
         return redirect()->route('login');
     }
-
 
     public function login_create()
     {
@@ -105,32 +103,34 @@ class AuthController extends Controller
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
+
                 return response()->json([
-                    "status" => false,
-                    "message" => "Please verify your email address before logging in"
+                    'status' => false,
+                    'message' => 'Please verify your email address before logging in',
                 ], 403);
             } else {
 
                 $request->session()->regenerate();
+
                 return response()->json([
-                    "status" => true,
+                    'status' => true,
                     'message' => 'Logged in Successfuly.',
                 ], 200);
             }
         } else {
             return response()->json([
-                "status" => false,
+                'status' => false,
                 'message' => 'Incorrect Email or Password.',
             ], 401);
         }
     }
-
 
     public function logout(Request $request)
     {
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
         return redirect('/welcome');
     }
 }

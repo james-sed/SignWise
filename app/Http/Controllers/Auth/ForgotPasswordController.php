@@ -3,54 +3,106 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Mail\WebsiteMail;
 use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
-//user will send their email to sent a reset pass link
-
+/**
+ * Handles the "forgot password" request: creates a reset token, emails a
+ * reset link, and (in non-production) prints the link to the server console
+ * so the flow can be exercised without access to email.
+ */
 class ForgotPasswordController extends Controller
 {
-    public function forgetPassword()
-    {
-        return view('Auth.EmailForgetPassword');
-    }
+    /**
+     * How long a reset link stays valid, in minutes.
+     */
+    public const TOKEN_TTL_MINUTES = 30;
 
-    public function forget_Password_Submit(Request $request)
+    public function sendResetLink(Request $request)
     {
-
         $request->validate([
-            'email' => 'required|email'
+            'email' => ['required', 'email'],
         ]);
 
-        $user =  User::CheckEmailExist($request->email)->first();
+        $email = $request->input('email');
 
-        if (!$user) {
-            return response()->json([
-                'message' => 'Email does not exist.'
-            ]);
+        // Always answer with exactly the same payload, whether or not the
+        // account exists, so the endpoint cannot be used to enumerate users.
+        $genericResponse = response()->json([
+            'message' => 'If an account exists for that email, a reset link has been sent.',
+        ]);
+
+        $user = User::CheckEmailExist($email)->first();
+
+        if (! $user) {
+            return $genericResponse;
         }
-        $email_token = hash('sha256', time());
-        $user->email_token = $email_token;
-        $user->update();
 
+        $token = Str::random(64);
 
-        $link = URL::temporarySignedRoute(
-            'customer_reset_password',
-            now()->addMinutes(60),
-            ['email_token' => $email_token, 'email' => $request->email]
+        // Store only a deterministic hash of the token. A deterministic hash
+        // (rather than a salted one) lets us look the token up on its own,
+        // which is what allows the link to carry just the token.
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token' => hash('sha256', $token),
+                'created_at' => now(),
+            ]
         );
 
-        $subject = 'Reset Password';
-        $message = 'Click on the following link to reset your password:<br> <a href="' . $link . '">' . $link . '</a>';
+        $link = $this->resetUrl($token);
 
-        Mail::to($request->email)->send(new WebsiteMail($subject, $message));
+        $this->logDevLink($link);
 
-        return response()->json([
-            'message' => 'Reset Password link sent to your email',
-            'link' => $link
-        ]);
+        // Still attempt the normal email send, but never let a delivery
+        // failure change what the user sees.
+        try {
+            $subject = 'Reset Password';
+            $message = 'Click on the following link to reset your password:<br> <a href="'.$link.'">'.$link.'</a>';
+
+            Mail::to($user->email)->send(new WebsiteMail($subject, $message));
+        } catch (\Throwable $e) {
+            Log::warning('[password-reset] Failed to send reset email.', [
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $genericResponse;
+    }
+
+    private function resetUrl(string $token): string
+    {
+        return rtrim(config('app.url'), '/').'/reset-password?token='.$token;
+    }
+
+    /**
+     * In every environment except production, echo the full reset link to the
+     * server console so developers can follow the flow without email.
+     *
+     * The application environment (APP_ENV) is the PHP equivalent of NODE_ENV;
+     * it is what determines whether we are running in production.
+     */
+    private function logDevLink(string $link): void
+    {
+        if (app()->environment('production')) {
+            return;
+        }
+
+        $line = '[password-reset] '.$link;
+
+        // `php artisan serve` / php -S expose STDERR, which prints straight to
+        // the terminal running the server.
+        if (defined('STDERR')) {
+            fwrite(STDERR, $line.PHP_EOL);
+        }
+
+        Log::info($line);
     }
 }
